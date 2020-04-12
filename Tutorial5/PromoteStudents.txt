@@ -1,0 +1,35 @@
+DROP PROCEDURE PromoteStudents;
+CREATE PROCEDURE PromoteStudents @StudyName VARCHAR(100), @Semester INT
+AS
+BEGIN
+    SET XACT_ABORT ON;
+    BEGIN TRAN
+
+        --1. Studies exist
+        DECLARE @IdStudy INT = (SELECT IdStudy FROM Studies WHERE Name = @StudyName);
+        IF @IdStudy IS NULL
+            BEGIN
+                RAISERROR ('Studies with given name not found', 16, 1);
+            END
+
+        --2. Find Enrollment
+        DECLARE @IdNextEnrollment INT = (SELECT IdEnrollment
+                                         FROM Enrollment
+                                         WHERE IdStudy = @IdStudy
+                                           AND Semester = @Semester + 1);
+
+        IF @IdNextEnrollment IS NULL -- If Enrollment doesn't exist yet
+            BEGIN
+                DECLARE @MaxIdEnrollment INT = (SELECT MAX(IdEnrollment) FROM Enrollment);
+                SET @IdNextEnrollment = @MaxIdEnrollment + 1;
+                INSERT INTO Enrollment VALUES (@IdNextEnrollment, @Semester + 1, @IdStudy, GETDATE());
+            END
+
+        --3. Update all Students (with values from request)
+        UPDATE Student SET IdEnrollment = @IdNextEnrollment
+        WHERE IdEnrollment = (SELECT IdEnrollment FROM Enrollment WHERE IdStudy = @IdStudy AND Semester = @Semester);
+
+    COMMIT
+    SELECT * FROM Enrollment WHERE IdEnrollment = @IdNextEnrollment;
+END
+GO
